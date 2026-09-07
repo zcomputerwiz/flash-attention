@@ -98,7 +98,7 @@ jobs:
         with:
           cuda: ${{ inputs.cuda-version }}
           method: "network"
-          sub-packages: '["nvcc", "cudart", "cublas", "cufft", "curand", "cusolver", "cusparse", "visual_studio_integration"]'
+          sub-packages: '["nvcc", "cudart", "cuda_cccl" "cublas", "cufft", "curand", "cusolver", "cusparse", "visual_studio_integration"]'
 
       - name: Install CUDA for Linux ${{ inputs.cuda-version }}
         if: inputs.cuda-version != 'cpu' && runner.os == 'Linux'
