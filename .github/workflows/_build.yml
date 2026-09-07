@@ -35,15 +35,12 @@ on:
 
 defaults:
   run:
-    shell: bash -x -e -u -o pipefail {0}
+    shell: ${{ contains(inputs.runs-on, 'windows') && 'bash' || 'bash -x -e -u -o pipefail {0}' }}
 
 jobs:
   build-wheel:
     runs-on: ${{ inputs.runs-on }}
     name: Build wheel (${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }})
-    defaults:
-      run:
-        shell: pwsh
     steps:
       - name: Checkout
         uses: actions/checkout@v7
