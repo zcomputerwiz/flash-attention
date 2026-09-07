@@ -52,13 +52,13 @@ jobs:
         #  submodules: recursive
 
       - name: Add MSBuild to PATH
-        if: runner.os == Windows
+        if: runner.os == 'Windows'
         uses: microsoft/setup-msbuild@v2
         with:
           msbuild-architecture: x64
 
       - name: Set up MSVC Dev Environment
-        if: runner.os == Windows
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
