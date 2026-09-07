@@ -48,6 +48,10 @@ jobs:
         #  ref: ${{ inputs.release-version }}
         #  submodules: recursive
 
+      - name: Configure Distutils for MSVC
+        if: runner.os == 'Windows'
+        run: echo "DISTUTILS_USE_SDK=1" >> "$GITHUB_ENV"
+
       - name: Add MSBuild to PATH
         if: runner.os == 'Windows'
         uses: microsoft/setup-msbuild@v2
