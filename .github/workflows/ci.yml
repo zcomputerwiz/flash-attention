@@ -1,8 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main, ci-fix]
+  # push:
+  #  branches: [main, ci-fix]
   workflow_dispatch:
 
 permissions:
