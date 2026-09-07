@@ -35,7 +35,7 @@ on:
 
 defaults:
   run:
-    shell: ${{ contains(inputs.runs-on, 'windows') && 'bash' || 'bash -x -e -u -o pipefail {0}' }}
+    shell: bash
 
 jobs:
   build-wheel:
