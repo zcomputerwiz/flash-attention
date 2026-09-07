@@ -41,15 +41,30 @@ jobs:
   build-wheel:
     runs-on: ${{ inputs.runs-on }}
     name: Build wheel (${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }})
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
+        # with:
+        #  ref: ${{ inputs.release-version }}
+        #  submodules: recursive
+
+      - name: Add MSBuild to PATH
+        if: runner.os == Windows
+        uses: microsoft/setup-msbuild@v2
         with:
-          ref: ${{ inputs.release-version }}
-          submodules: recursive
+          msbuild-architecture: x64
+
+      - name: Set up MSVC Dev Environment
+        if: runner.os == Windows
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ inputs.python-version }}
 
@@ -75,15 +90,22 @@ jobs:
         with:
           swap-size-gb: 10
 
-      - name: Install CUDA ${{ inputs.cuda-version }}
-        if: ${{ inputs.cuda-version != 'cpu' }}
+      - name: Install CUDA for Windows ${{ inputs.cuda-version }}
+        if: inputs.cuda-version != 'cpu' && runner.os == 'Windows'
         uses: Jimver/cuda-toolkit@v0.2.35
-        id: cuda-toolkit
+        id: cuda-toolkit-win
+        with:
+          cuda: ${{ inputs.cuda-version }}
+          method: "network"
+          sub-packages: '["nvcc", "cudart", "cublas", "cufft", "curand", "cusolver", "cusparse", "visual_studio_integration"]'
+
+      - name: Install CUDA for Linux ${{ inputs.cuda-version }}
+        if: inputs.cuda-version != 'cpu' && runner.os == 'Linux'
+        uses: Jimver/cuda-toolkit@v0.2.35
+        id: cuda-toolkit-linux
         with:
           cuda: ${{ inputs.cuda-version }}
           linux-local-args: '["--toolkit"]'
-          # default method is "local", and we're hitting some error with caching for CUDA 11.8 and 12.1
-          # method: ${{ (inputs.cuda-version == '11.8.0' || inputs.cuda-version == '12.1.0') && 'network' || 'local' }}
           method: "network"
           sub-packages: '["nvcc"]'
 
@@ -131,7 +153,7 @@ jobs:
           python -c "from torch.utils import cpp_extension; print (cpp_extension.CUDA_HOME)"
 
       - name: Restore build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build.tar
           key: build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-${{ github.run_number }}-${{ github.run_attempt }}
@@ -198,7 +220,7 @@ jobs:
 
       - name: Save build cache timeout
         if: always() && steps.build_wheel.outputs.build_exit_code == 124
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           key: build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-${{ github.run_number }}-${{ github.run_attempt }}
           path: build.tar
@@ -209,20 +231,24 @@ jobs:
 
       - name: Get Release with tag
         id: get_current_release
-        uses: joutvhu/get-release@v1
+        if: inputs.upload-to-release
+        uses: actions/github-script@v7
         with:
-          tag_name: ${{ inputs.release-version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: '${{ inputs.release-version }}'
+            });
+
+            for (const key of ['id', 'tag_name', 'name', 'body', 'html_url', 'upload_url']) {
+              core.setOutput(key, release.data[key]);
+            }
 
       - name: Upload Release Asset
         id: upload_release_asset
         if: inputs.upload-to-release
-        uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.get_current_release.outputs.upload_url }}
-          asset_path: ./dist/${{env.wheel_name}}
-          asset_name: ${{env.wheel_name}}
-          asset_content_type: application/*
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ inputs.release-version }}" "./dist/${{ env.wheel_name }}" --clobber
