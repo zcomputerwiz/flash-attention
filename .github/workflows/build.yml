@@ -18,6 +18,11 @@ on:
         required: true
         type: string
         default: "13.0.1"
+      cuda-archs:
+        description: "Semicolon-delimited CUDA architectures to include in the wheel"
+        required: true
+        type: string
+        default: "80;90"
       torch-version:
         description: "The PyTorch version to use for the build"
         required: true
@@ -45,6 +50,7 @@ jobs:
       runs-on: ${{ inputs.runs-on }}
       python-version: ${{ inputs.python-version }}
       cuda-version: ${{ inputs.cuda-version }}
+      cuda-archs: ${{ inputs.cuda-archs }}
       torch-version: ${{ inputs.torch-version }}
       cxx11_abi: ${{ inputs.cxx11_abi }}
       upload-to-release: ${{ inputs.upload-to-release }}
