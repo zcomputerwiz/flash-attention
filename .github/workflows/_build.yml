@@ -53,11 +53,10 @@ jobs:
         #  ref: ${{ inputs.release-version }}
         #  submodules: recursive
 
-      - name: Configure Distutils for MSVC and Compiler Flags
+      - name: Configure Distutils for MSVC
         if: runner.os == 'Windows'
         run: |
           echo "DISTUTILS_USE_SDK=1" >> "$GITHUB_ENV"
-          export CUDAFLAGS="-Xcompiler=/Zc:preprocessor,/Zc:__cplusplus,/permissive- -DCCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING"
 
       - name: Add MSBuild to PATH
         if: runner.os == 'Windows'
