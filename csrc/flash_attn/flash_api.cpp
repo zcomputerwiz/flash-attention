@@ -130,12 +130,12 @@ void set_params_fprop(Flash_fwd_params &params,
     if (softcap > 0.0) {
         params.softcap = softmax_scale / softcap;
         params.scale_softmax = softcap;
-        params.scale_softmax_log2 = softcap * M_LOG2E;
+        params.scale_softmax_log2 = softcap * kLog2E;
     } else{
         // Remove potential NaN
         params.softcap = 0.0;
         params.scale_softmax = softmax_scale;
-        params.scale_softmax_log2 = softmax_scale * M_LOG2E;
+        params.scale_softmax_log2 = softmax_scale * kLog2E;
     }
 
     // Set this to probability of keeping an element to simplify things.

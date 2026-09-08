@@ -64,4 +64,10 @@
   content                                                                      \
   }
 
+namespace FLASH_NAMESPACE {
+
+constexpr float kLog2E = 1.4426950408889634074f;
+
+} // namespace FLASH_NAMESPACE
+
 #endif // FLASH_NAMESPACE_CONFIG_H
