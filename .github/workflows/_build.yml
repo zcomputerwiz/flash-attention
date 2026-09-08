@@ -98,7 +98,17 @@ jobs:
         with:
           cuda: ${{ inputs.cuda-version }}
           method: "network"
-          sub-packages: '["nvcc", "cudart", "thrust", "cublas", "cufft", "curand", "cusolver", "cusparse", "visual_studio_integration"]'
+
+      - name: Verify CUDA CRT Headers
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if [ -f "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/include/crt/host_config.h" ]; then
+            echo "SUCCESS: crt/host_config.h found."
+          else
+            echo "ERROR: crt/host_config.h is missing."
+            exit 1
+          fi
 
       - name: Install CUDA for Linux ${{ inputs.cuda-version }}
         if: inputs.cuda-version != 'cpu' && runner.os == 'Linux'
