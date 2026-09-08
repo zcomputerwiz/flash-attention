@@ -105,21 +105,6 @@ jobs:
           cuda: ${{ inputs.cuda-version }}
           method: "network"
 
-      - name: Patch Types
-        if: runner.os == 'Windows'
-        run: |
-          python -c "
-          path = 'csrc/flash_attn/src/softmax.h'
-          with open(path, 'r') as f:
-              content = f.read()
-          patch = '''#ifndef M_LOG2E
-          #define M_LOG2E 1.44269504088896340735992468100189214f
-          #endif
-          '''
-          with open(path, 'w') as f:
-              f.write(patch + content)
-          "
-
       - name: Install CUDA for Linux ${{ inputs.cuda-version }}
         if: inputs.cuda-version != 'cpu' && runner.os == 'Linux'
         uses: Jimver/cuda-toolkit@v0.2.35
