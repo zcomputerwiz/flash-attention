@@ -105,17 +105,6 @@ jobs:
           cuda: ${{ inputs.cuda-version }}
           method: "network"
 
-      - name: Verify CUDA CRT Headers
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          if [ -f "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/include/crt/host_config.h" ]; then
-            echo "SUCCESS: crt/host_config.h found."
-          else
-            echo "ERROR: crt/host_config.h is missing."
-            exit 1
-          fi
-
       - name: Patch Types
         if: runner.os == 'Windows'
         run: |
@@ -183,6 +172,70 @@ jobs:
           python -c "import torch; print('PyTorch:', torch.__version__)"
           python -c "import torch; print('CUDA:', torch.version.cuda)"
           python -c "from torch.utils import cpp_extension; print (cpp_extension.CUDA_HOME)"
+
+      - name: Verify action-provided CUDA installation
+        if: inputs.cuda-version != 'cpu' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "Requested CUDA version (reporting only): ${{ inputs.cuda-version }}"
+
+          if ([string]::IsNullOrWhiteSpace($env:CUDA_PATH)) {
+            throw "Jimver/cuda-toolkit did not provide CUDA_PATH."
+          }
+
+          $cudaPath = [IO.Path]::GetFullPath($env:CUDA_PATH).TrimEnd([char[]]@('\', '/'))
+          $hostConfig = Join-Path $cudaPath "include/crt/host_config.h"
+          $nvcc = Join-Path $cudaPath "bin/nvcc.exe"
+          foreach ($requiredPath in @($hostConfig, $nvcc)) {
+            if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+              throw "Required CUDA file is missing: $requiredPath (CUDA_PATH=$cudaPath)"
+            }
+            Write-Host "Verified CUDA file: $requiredPath"
+          }
+
+          $probe = Join-Path $env:RUNNER_TEMP "flash-attention-nvcc-include-probe.cu"
+          $preprocessed = Join-Path $env:RUNNER_TEMP "flash-attention-nvcc-include-probe.i"
+          Set-Content -LiteralPath $probe -Value '#include <cuda_runtime.h>' -Encoding ascii
+          $nvccOutput = & $nvcc -v -E $probe -o $preprocessed 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            throw "NVCC preprocessing failed with exit code $LASTEXITCODE.`n$nvccOutput"
+          }
+          Write-Host $nvccOutput
+
+          $includeMatches = [regex]::Matches($nvccOutput, '(?m)^#\$ INCLUDES=(.*)$')
+          $includeDirs = @(
+            foreach ($includeMatch in $includeMatches) {
+              foreach ($pathMatch in [regex]::Matches($includeMatch.Groups[1].Value, '"-I([^"]+)"|-I(?:"([^"]+)"|(\S+))')) {
+                foreach ($groupNumber in 1..3) {
+                  if ($pathMatch.Groups[$groupNumber].Success) {
+                    $pathMatch.Groups[$groupNumber].Value.TrimEnd('"')
+                    break
+                  }
+                }
+              }
+            }
+          ) | Select-Object -Unique
+          if ($includeDirs.Count -eq 0) {
+            throw "NVCC verbose output did not report any include directories.`n$nvccOutput"
+          }
+          foreach ($includeDir in $includeDirs) {
+            if (-not (Test-Path -LiteralPath $includeDir -PathType Container)) {
+              throw "NVCC reported a missing include directory: $includeDir"
+            }
+            Write-Host "Verified NVCC include directory: $includeDir"
+          }
+
+          $torchCudaHome = python -c "from torch.utils.cpp_extension import CUDA_HOME; print(CUDA_HOME or '')"
+          $torchCudaHome = "$torchCudaHome".Trim()
+          if ([string]::IsNullOrWhiteSpace($torchCudaHome)) {
+            throw "PyTorch did not detect CUDA_HOME. CUDA_PATH='$cudaPath'; torch.utils.cpp_extension.CUDA_HOME='$torchCudaHome'"
+          }
+          $torchCudaHome = [IO.Path]::GetFullPath($torchCudaHome).TrimEnd([char[]]@('\', '/'))
+          if (-not $cudaPath.Equals($torchCudaHome, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "CUDA installation mismatch: CUDA_PATH='$cudaPath'; torch.utils.cpp_extension.CUDA_HOME='$torchCudaHome'"
+          }
+          Write-Host "CUDA_PATH matches torch.utils.cpp_extension.CUDA_HOME: $cudaPath"
 
       - name: Restore build cache
         uses: actions/cache/restore@v6
