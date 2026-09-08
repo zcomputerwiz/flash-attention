@@ -330,11 +330,19 @@ if not SKIP_CUDA_BUILD and not IS_ROCM:
     # "-DFLASHATTENTION_DISABLE_LOCAL",
     ]
 
-    compiler_c17_flag=["-O3", "-std=c++17"]
+    compiler_c17_flag = ["-O3", "-std=c++17"]
     # Add Windows-specific flags
-    if sys.platform == "win32" and os.getenv('DISTUTILS_USE_SDK') == '1':
-        nvcc_flags.extend(["-Xcompiler", "/Zc:__cplusplus"])
-        compiler_c17_flag=["-O2", "/std:c++17", "/Zc:__cplusplus"]
+    if sys.platform == "win32":
+        msvc_flags = ["/Zc:preprocessor", "/Zc:__cplusplus", "/permissive-"]
+        for flag in msvc_flags:
+            nvcc_flags.extend(["-Xcompiler", flag])
+        nvcc_flags.append("-DCCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING")
+        compiler_c17_flag = [
+            "-O2",
+            "/std:c++17",
+            *msvc_flags,
+            "/DCCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING",
+        ]
 
     # Opt-in: disable building dropout and its dependent headers (ATen philox/RNG
     # headers) from the FA2 build. This flag must be shared across both cxx and nvcc
