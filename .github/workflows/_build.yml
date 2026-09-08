@@ -49,9 +49,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        # with:
-        #  ref: ${{ inputs.release-version }}
-        #  submodules: recursive
+        with:
+          ref: ${{ inputs.release-version || github.sha }}
+          submodules: recursive
+
+      - name: Validate CUTLASS submodule checkout
+        run: |
+          if [[ ! -f csrc/cutlass/include/cutlass/cutlass.h ]]; then
+            echo "::error::CUTLASS headers are missing; this build requires a checkout with recursive submodules."
+            exit 1
+          fi
 
       - name: Configure Distutils for MSVC
         if: runner.os == 'Windows'
