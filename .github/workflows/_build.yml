@@ -15,6 +15,11 @@ on:
         description: "The CUDA version to use for the build"
         required: true
         type: string
+      cuda-archs:
+        description: "Semicolon-delimited CUDA architectures to include in the wheel"
+        required: false
+        type: string
+        default: "80;90"
       torch-version:
         description: "The PyTorch version to use for the build"
         required: true
@@ -40,7 +45,7 @@ defaults:
 jobs:
   build-wheel:
     runs-on: ${{ inputs.runs-on }}
-    name: Build wheel (${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }})
+    name: Build wheel (${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.cuda-archs }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }})
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -184,9 +189,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build.tar
-          key: build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.cuda-archs }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-${{ github.run_number }}-${{ github.run_attempt }}
           restore-keys: |
-            build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-
+            build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.cuda-archs }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-
 
       - name: Unpack build cache
         run: |
@@ -215,13 +220,21 @@ jobs:
           pip install ninja packaging wheel
           export PATH=/usr/local/nvidia/bin:/usr/local/nvidia/lib64:$PATH
           export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-          # Limit MAX_JOBS otherwise the github runner goes OOM
-          # nvcc 11.8 can compile with 2 jobs, but nvcc 12.3 goes OOM
-
-          export MAX_JOBS=$([ "$MATRIX_CUDA_VERSION" == "129" ] || [ "$MATRIX_CUDA_VERSION" == "130" ] || [ "$MATRIX_CUDA_VERSION" == "132" ] && echo 1 || echo 2)
+          # Keep compilation within the hosted runners' memory limits. Windows
+          # builds target only the requested architectures, so they can run two
+          # jobs even with CUDA 13 instead of being throttled by toolkit version.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export MAX_JOBS=2
+          else
+            case "$MATRIX_CUDA_VERSION" in
+              129|130|132) export MAX_JOBS=1 ;;
+              *) export MAX_JOBS=2 ;;
+            esac
+          fi
           export NVCC_THREADS=2
           export FLASH_ATTENTION_FORCE_BUILD="TRUE"
           export FLASH_ATTENTION_FORCE_CXX11_ABI=${{ inputs.cxx11_abi }}
+          export FLASH_ATTN_CUDA_ARCHS='${{ inputs.cuda-archs }}'
 
           # 5h timeout since GH allows max 6h and we want some buffer
           EXIT_CODE=0
@@ -250,7 +263,7 @@ jobs:
         if: always() && steps.build_wheel.outputs.build_exit_code == 124
         uses: actions/cache/save@v6
         with:
-          key: build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: build-${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.cuda-archs }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }}-${{ github.run_number }}-${{ github.run_attempt }}
           path: build.tar
 
       - name: Log Built Wheels
