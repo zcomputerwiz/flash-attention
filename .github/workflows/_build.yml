@@ -15,11 +15,13 @@ on:
         description: "The CUDA version to use for the build"
         required: true
         type: string
+      # These are setup.py family identifiers, not arbitrary CUDA compute
+      # capabilities. Turing/SM75 is unsupported by this FA2 source tree.
       cuda-archs:
-        description: "Semicolon-delimited CUDA architectures to include in the wheel"
+        description: "CUDA families: 80=Ampere/Ada, 90=Hopper, 100=datacenter Blackwell, 110=Thor, 120=consumer Blackwell; separate multiple values with semicolons"
         required: false
         type: string
-        default: "80;90"
+        default: "80"
       torch-version:
         description: "The PyTorch version to use for the build"
         required: true
@@ -69,6 +71,26 @@ jobs:
             echo "::error::CUTLASS headers are missing; this build requires a checkout with recursive submodules."
             exit 1
           fi
+
+      - name: Validate CUDA architecture families
+        env:
+          CUDA_ARCHS: ${{ inputs.cuda-archs }}
+        run: |
+          family_mapping="80=Ampere/Ada, 90=Hopper, 100=datacenter Blackwell, 110=Thor, 120=consumer Blackwell"
+          if [[ -z "$CUDA_ARCHS" || "$CUDA_ARCHS" == \;* || "$CUDA_ARCHS" == *\; || "$CUDA_ARCHS" == *\;\;* ]]; then
+            echo "::error::cuda-archs must contain non-empty family identifiers separated by semicolons. Supported families: $family_mapping. Turing/SM75 is unsupported."
+            exit 1
+          fi
+          IFS=';' read -ra cuda_archs <<< "$CUDA_ARCHS"
+          for cuda_arch in "${cuda_archs[@]}"; do
+            case "$cuda_arch" in
+              80|90|100|110|120) ;;
+              *)
+                echo "::error::Unsupported CUDA family '$cuda_arch'. Supported families: $family_mapping. Turing/SM75 is unsupported."
+                exit 1
+                ;;
+            esac
+          done
 
       - name: Configure Distutils for MSVC
         if: runner.os == 'Windows'
