@@ -47,6 +47,16 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     name: Build wheel (${{ inputs.release-version }}-${{ inputs.python-version }}-${{ inputs.cuda-version }}-${{ inputs.cuda-archs }}-${{ inputs.torch-version }}-${{ inputs.cxx11_abi }})
     steps:
+
+      - name: Enable long paths in Windows and Git
+        shell: powershell
+        run: |
+          # 1. Enable long paths in the Windows Registry
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          
+          # 2. Configure Git globally to allow long paths
+          git config --global core.longpaths true
+        
       - name: Checkout
         uses: actions/checkout@v7
         with:
