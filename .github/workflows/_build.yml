@@ -281,6 +281,18 @@ jobs:
           pip install ninja packaging wheel
           export PATH=/usr/local/nvidia/bin:/usr/local/nvidia/lib64:$PATH
           export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Git Bash prepends /usr/bin, which also contains a POSIX
+            # link.exe. Put the active MSVC toolchain first so setuptools
+            # invokes Visual Studio's linker for the final .pyd.
+            msvc_bin="$(cygpath -u "${VCToolsInstallDir}")bin/Host${VSCMD_ARG_HOST_ARCH}/${VSCMD_ARG_TGT_ARCH}"
+            if [ ! -x "$msvc_bin/link.exe" ]; then
+              echo "::error::MSVC linker is missing: $msvc_bin/link.exe"
+              exit 1
+            fi
+            export PATH="$msvc_bin:$PATH"
+            echo "Using MSVC linker: $(command -v link.exe)"
+          fi
           # Keep compilation within the hosted runners' memory limits. Windows
           # builds target only the requested architectures, so they can run two
           # jobs even with CUDA 13 instead of being throttled by toolkit version.
