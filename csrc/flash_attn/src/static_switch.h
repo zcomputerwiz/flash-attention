@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <c10/util/Exception.h>
+
 /// @param COND       - a boolean expression to switch by
 /// @param CONST_NAME - a name given for the constexpr bool variable.
 /// @param ...       - code to execute for true and false
@@ -87,25 +89,49 @@
     }                                        \
   }()
 
+#ifndef FLASHATTENTION_DISABLE_HDIM32
+  #define _CASE_HDIM_32(...) if (HEADDIM <= 32) { constexpr static int kHeadDim = 32; return __VA_ARGS__(); } else
+#else
+  #define _CASE_HDIM_32(...) if (HEADDIM <= 32) { TORCH_CHECK(false, "FlashAttention was compiled without support for head_dim <= 32"); } else
+#endif
+
+#ifndef FLASHATTENTION_DISABLE_HDIM64
+  #define _CASE_HDIM_64(...) if (HEADDIM <= 64) { constexpr static int kHeadDim = 64; return __VA_ARGS__(); } else
+#else
+  #define _CASE_HDIM_64(...) if (HEADDIM <= 64) { TORCH_CHECK(false, "FlashAttention was compiled without support for head_dim <= 64"); } else
+#endif
+
+#ifndef FLASHATTENTION_DISABLE_HDIM96
+  #define _CASE_HDIM_96(...) if (HEADDIM <= 96) { constexpr static int kHeadDim = 96; return __VA_ARGS__(); } else
+#else
+  #define _CASE_HDIM_96(...) if (HEADDIM <= 96) { TORCH_CHECK(false, "FlashAttention was compiled without support for head_dim <= 96"); } else
+#endif
+
+#ifndef FLASHATTENTION_DISABLE_HDIM128
+  #define _CASE_HDIM_128(...) if (HEADDIM <= 128) { constexpr static int kHeadDim = 128; return __VA_ARGS__(); } else
+#else
+  #define _CASE_HDIM_128(...) if (HEADDIM <= 128) { TORCH_CHECK(false, "FlashAttention was compiled without support for head_dim <= 128"); } else
+#endif
+
+#ifndef FLASHATTENTION_DISABLE_HDIM192
+  #define _CASE_HDIM_192(...) if (HEADDIM <= 192) { constexpr static int kHeadDim = 192; return __VA_ARGS__(); } else
+#else
+  #define _CASE_HDIM_192(...) if (HEADDIM <= 192) { TORCH_CHECK(false, "FlashAttention was compiled without support for head_dim <= 192"); } else
+#endif
+
+#ifndef FLASHATTENTION_DISABLE_HDIM256
+  #define _CASE_HDIM_256(...) if (HEADDIM <= 256) { constexpr static int kHeadDim = 256; return __VA_ARGS__(); } else
+#else
+  #define _CASE_HDIM_256(...) if (HEADDIM <= 256) { TORCH_CHECK(false, "FlashAttention was compiled without support for head_dim <= 256"); } else
+#endif
+
 #define HEADDIM_SWITCH(HEADDIM, ...)   \
-  [&] {                                    \
-    if (HEADDIM <= 32) {                   \
-      constexpr static int kHeadDim = 32;  \
-      return __VA_ARGS__();                \
-    } else if (HEADDIM <= 64) {            \
-      constexpr static int kHeadDim = 64;  \
-      return __VA_ARGS__();                \
-    } else if (HEADDIM <= 96) {            \
-      constexpr static int kHeadDim = 96;  \
-      return __VA_ARGS__();                \
-    } else if (HEADDIM <= 128) {           \
-      constexpr static int kHeadDim = 128; \
-      return __VA_ARGS__();                \
-    } else if (HEADDIM <= 192) {           \
-      constexpr static int kHeadDim = 192; \
-      return __VA_ARGS__();                \
-    } else if (HEADDIM <= 256) {           \
-      constexpr static int kHeadDim = 256; \
-      return __VA_ARGS__();                \
-    }                                      \
+  [&] {                                \
+    _CASE_HDIM_32(__VA_ARGS__)         \
+    _CASE_HDIM_64(__VA_ARGS__)         \
+    _CASE_HDIM_96(__VA_ARGS__)         \
+    _CASE_HDIM_128(__VA_ARGS__)        \
+    _CASE_HDIM_192(__VA_ARGS__)        \
+    _CASE_HDIM_256(__VA_ARGS__)        \
+    { TORCH_CHECK(false, "Unsupported head dimension: ", HEADDIM); } \
   }()

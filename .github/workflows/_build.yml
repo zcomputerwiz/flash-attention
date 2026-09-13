@@ -26,6 +26,36 @@ on:
         description: "The PyTorch version to use for the build"
         required: true
         type: string
+      torch-pre:
+        description: "Use PyTorch pre-release / nightly index (auto-enabled for 2.11+ or dev)"
+        required: false
+        type: boolean
+        default: false
+      head-dims:
+        description: "Head dimensions to compile ('64,128', '64,128,256', or 'all')"
+        required: false
+        type: string
+        default: "64,128"
+      disable-alibi:
+        description: "Disable ALiBi attention bias templates"
+        required: false
+        type: boolean
+        default: false
+      disable-dropout:
+        description: "Disable attention dropout templates"
+        required: false
+        type: boolean
+        default: false
+      disable-softcap:
+        description: "Disable attention softcap templates"
+        required: false
+        type: boolean
+        default: false
+      disable-local:
+        description: "Disable local / sliding window attention templates"
+        required: false
+        type: boolean
+        default: false
       cxx11_abi:
         description: "The C++11 ABI to use for the build"
         required: true
@@ -120,6 +150,7 @@ jobs:
           echo "MATRIX_TORCH_VERSION=$(echo ${{ inputs.torch-version }} | awk -F \. {'print $1 "." $2'})" >> $GITHUB_ENV
           echo "WHEEL_CUDA_VERSION=$(echo ${{ inputs.cuda-version }} | awk -F \. {'print $1'})" >> $GITHUB_ENV
           echo "MATRIX_PYTHON_VERSION=$(echo ${{ inputs.python-version }} | awk -F \. {'print $1 $2'})" >> $GITHUB_ENV
+          echo "CACHE_PREFIX=build-${{ runner.os }}-py${{ inputs.python-version }}-cuda${{ inputs.cuda-version }}-torch${{ inputs.torch-version }}-abi${{ inputs.cxx11_abi }}-arch${{ inputs.cuda-archs }}-hdim${{ inputs.head-dims }}-alibi${{ inputs.disable-alibi }}-drop${{ inputs.disable-dropout }}-soft${{ inputs.disable-softcap }}-loc${{ inputs.disable-local }}" >> $GITHUB_ENV
 
       - name: Free up disk space
         if: ${{ runner.os == 'Linux' }}
@@ -168,6 +199,7 @@ jobs:
               '2.8': [126, 128, 129], \
               '2.9': [126, 128, 130], \
               '2.10': [126, 128, 130], \
+              '2.11': [126, 128, 130], \
             }[env['MATRIX_TORCH_VERSION']]; \
             sys_cuda = int(env['MATRIX_CUDA_VERSION']); \
             print(max(v for v in available if v <= sys_cuda))" \
@@ -179,16 +211,21 @@ jobs:
               PLAT=manylinux_2_27_x86_64.manylinux_2_28_x86_64
           fi
           echo "PLAT=$PLAT" >> $GITHUB_ENV
-          if [[ ${{ inputs.torch-version }} == *"dev"* ]]; then
-            # pip install --no-cache-dir --pre torch==${{ inputs.torch-version }} --index-url https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}
-            # Can't use --no-deps because we need cudnn etc.
-            # Hard-coding this version of pytorch-triton for torch 2.9.0.dev20250904
-            pip install jinja2
-            TRITON_URL=https://download.pytorch.org/whl/nightly/pytorch_triton-3.4.0%2Bgitf7888497-cp${MATRIX_PYTHON_VERSION}-cp${MATRIX_PYTHON_VERSION}-${PLAT}.whl
-            TORCH_URL=https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}/torch-${{ inputs.torch-version }}%2Bcu${TORCH_CUDA_VERSION}-cp${MATRIX_PYTHON_VERSION}-cp${MATRIX_PYTHON_VERSION}-manylinux_2_28_$(uname -m).whl
-            pip install --no-cache-dir --pre "${TRITON_URL}"
-            pip install --no-cache-dir --pre "${TORCH_URL}"
+          USE_PRE="false"
+          if [ "${{ inputs.torch-pre }}" = "true" ] || [[ "${{ inputs.torch-version }}" == *"dev"* ]] || [[ "${{ inputs.torch-version }}" == 2.11* ]]; then
+            USE_PRE="true"
+          fi
+
+          if [ "$USE_PRE" = "true" ]; then
+            INDEX_URL="https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}"
+            echo "Installing PyTorch from nightly channel: ${INDEX_URL}"
+            if [[ "${{ inputs.torch-version }}" == "2.11.0" ]]; then
+              pip install --no-cache-dir --pre "torch>=2.11.0a0, <2.12.0" --index-url "${INDEX_URL}"
+            else
+              pip install --no-cache-dir --pre "torch==${{ inputs.torch-version }}" --index-url "${INDEX_URL}"
+            fi
           else
+            echo "Installing PyTorch from release channel: https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION}"
             pip install --no-cache-dir torch==${{ inputs.torch-version }} --index-url https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION}
           fi
           nvcc --version
@@ -267,9 +304,10 @@ jobs:
           # setuptools' Ninja backend keeps its object files under build/temp.*.
           # Cache build/ directly so restoring it cannot overwrite the checkout.
           path: build/
-          key: build-${{ runner.os }}-py${{ inputs.python-version }}-cuda${{ inputs.cuda-version }}-torch${{ inputs.torch-version }}-abi${{ inputs.cxx11_abi }}-arch${{ inputs.cuda-archs }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**', '.github/workflows/_build.yml') }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-${{ github.run_id }}
           restore-keys: |
-            build-${{ runner.os }}-py${{ inputs.python-version }}-cuda${{ inputs.cuda-version }}-torch${{ inputs.torch-version }}-abi${{ inputs.cxx11_abi }}-arch${{ inputs.cuda-archs }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**', '.github/workflows/_build.yml') }}-
+            ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-
+            ${{ env.CACHE_PREFIX }}-
 
       - name: Build wheel
         id: build_wheel
@@ -308,6 +346,19 @@ jobs:
           export FLASH_ATTENTION_FORCE_BUILD="TRUE"
           export FLASH_ATTENTION_FORCE_CXX11_ABI=${{ inputs.cxx11_abi }}
           export FLASH_ATTN_CUDA_ARCHS='${{ inputs.cuda-archs }}'
+          export FLASH_ATTN_HEAD_DIMS='${{ inputs.head-dims }}'
+          if [ "${{ inputs.disable-alibi }}" = "true" ]; then
+            export FLASH_ATTENTION_DISABLE_ALIBI="TRUE"
+          fi
+          if [ "${{ inputs.disable-dropout }}" = "true" ]; then
+            export FLASH_ATTENTION_DISABLE_DROPOUT="TRUE"
+          fi
+          if [ "${{ inputs.disable-softcap }}" = "true" ]; then
+            export FLASH_ATTENTION_DISABLE_SOFTCAP="TRUE"
+          fi
+          if [ "${{ inputs.disable-local }}" = "true" ]; then
+            export FLASH_ATTENTION_DISABLE_LOCAL="TRUE"
+          fi
 
           # 5h timeout since GH allows max 6h and we want some buffer
           EXIT_CODE=0
@@ -332,11 +383,11 @@ jobs:
           ls -al ./
           ls -al build/ || true
 
-      - name: Save build cache timeout
-        if: always() && steps.build_wheel.outputs.build_exit_code == 124
+      - name: Save build cache
+        if: always() && (steps.build_wheel.outputs.build_exit_code == 0 || steps.build_wheel.outputs.build_exit_code == 124)
         uses: actions/cache/save@v6
         with:
-          key: build-${{ runner.os }}-py${{ inputs.python-version }}-cuda${{ inputs.cuda-version }}-torch${{ inputs.torch-version }}-abi${{ inputs.cxx11_abi }}-arch${{ inputs.cuda-archs }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**', '.github/workflows/_build.yml') }}-${{ github.run_number }}-${{ github.run_attempt }}
+          key: ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-${{ github.run_id }}
           path: build/
 
       - name: Log Built Wheels
