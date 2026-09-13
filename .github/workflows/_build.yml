@@ -331,6 +331,13 @@ jobs:
         run: |
           ls dist
 
+      - name: Upload Windows binaries to artifacts
+        if: always() && steps.build_wheel.outputs.build_exit_code == 0
+        uses: actions/upload-artifact@v7
+        with:
+          name: flash-attention
+          path: ${{ github.workspace }}/dist/${{ env.wheel_name }}
+
       - name: Get Release with tag
         id: get_current_release
         if: inputs.upload-to-release
