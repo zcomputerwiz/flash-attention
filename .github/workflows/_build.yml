@@ -150,7 +150,9 @@ jobs:
           echo "MATRIX_TORCH_VERSION=$(echo ${{ inputs.torch-version }} | awk -F \. {'print $1 "." $2'})" >> $GITHUB_ENV
           echo "WHEEL_CUDA_VERSION=$(echo ${{ inputs.cuda-version }} | awk -F \. {'print $1'})" >> $GITHUB_ENV
           echo "MATRIX_PYTHON_VERSION=$(echo ${{ inputs.python-version }} | awk -F \. {'print $1 $2'})" >> $GITHUB_ENV
-          echo "CACHE_PREFIX=build-${{ runner.os }}-py${{ inputs.python-version }}-cuda${{ inputs.cuda-version }}-torch${{ inputs.torch-version }}-abi${{ inputs.cxx11_abi }}-arch${{ inputs.cuda-archs }}-hdim${{ inputs.head-dims }}-alibi${{ inputs.disable-alibi }}-drop${{ inputs.disable-dropout }}-soft${{ inputs.disable-softcap }}-loc${{ inputs.disable-local }}" >> $GITHUB_ENV
+          CLEAN_ARCHS=$(echo "${{ inputs.cuda-archs }}" | tr ';' '-')
+          CLEAN_HDIMS=$(echo "${{ inputs.head-dims }}" | tr ',' '-')
+          echo "CACHE_PREFIX=build-${{ runner.os }}-py${{ inputs.python-version }}-cuda${{ inputs.cuda-version }}-torch${{ inputs.torch-version }}-abi${{ inputs.cxx11_abi }}-arch${CLEAN_ARCHS}-hdim${CLEAN_HDIMS}-alibi${{ inputs.disable-alibi }}-drop${{ inputs.disable-dropout }}-soft${{ inputs.disable-softcap }}-loc${{ inputs.disable-local }}" >> $GITHUB_ENV
 
       - name: Free up disk space
         if: ${{ runner.os == 'Linux' }}
@@ -303,10 +305,27 @@ jobs:
           # setuptools' Ninja backend keeps its object files under build/temp.*.
           # Cache build/ directly so restoring it cannot overwrite the checkout.
           path: build/
-          key: ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-${{ github.run_id }}
+          key: ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-
             ${{ env.CACHE_PREFIX }}-
+
+      - name: Refresh build cache timestamps for Ninja
+        run: |
+          if [ -d "build" ]; then
+            echo "Refreshing modification timestamps of restored build artifacts for Ninja..."
+            python -c "
+          import os, time
+          now = time.time() + 10
+          for root, dirs, files in os.walk('build'):
+              for f in files:
+                  try:
+                      p = os.path.join(root, f)
+                      os.utime(p, (now, now))
+                  except Exception:
+                      pass
+          "
+          fi
 
       - name: Build wheel
         id: build_wheel
@@ -382,14 +401,25 @@ jobs:
           ls -al ./
           ls -al build/ || true
 
+      - name: Check for build artifacts
+        id: check_build
+        if: always()
+        run: |
+          if [ -d "build" ] && [ "$(ls -A build 2>/dev/null)" ]; then
+            echo "has_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Save build cache
-        if: always() && (steps.build_wheel.outputs.build_exit_code == 0 || steps.build_wheel.outputs.build_exit_code == 124)
+        if: always() && steps.check_build.outputs.has_build == 'true'
         uses: actions/cache/save@v6
         with:
-          key: ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-${{ github.run_id }}
+          key: ${{ env.CACHE_PREFIX }}-src${{ hashFiles('setup.py', 'pyproject.toml', 'MANIFEST.in', 'csrc/**', 'flash_attn/**', 'hopper/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: build/
 
       - name: Log Built Wheels
+        if: always() && steps.build_wheel.outputs.build_exit_code == 0
         run: |
           ls dist
 
