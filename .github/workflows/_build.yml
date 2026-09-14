@@ -199,7 +199,7 @@ jobs:
               '2.8': [126, 128, 129], \
               '2.9': [126, 128, 130], \
               '2.10': [126, 128, 130], \
-              '2.11': [126, 128, 130], \
+              '2.11': [124, 126, 128], \
             }[env['MATRIX_TORCH_VERSION']]; \
             sys_cuda = int(env['MATRIX_CUDA_VERSION']); \
             print(max(v for v in available if v <= sys_cuda))" \
@@ -212,21 +212,20 @@ jobs:
           fi
           echo "PLAT=$PLAT" >> $GITHUB_ENV
           USE_PRE="false"
-          if [ "${{ inputs.torch-pre }}" = "true" ] || [[ "${{ inputs.torch-version }}" == *"dev"* ]] || [[ "${{ inputs.torch-version }}" == 2.11* ]]; then
+          if [ "${{ inputs.torch-pre }}" = "true" ] || [[ "${{ inputs.torch-version }}" == *"dev"* ]] || [[ "${{ inputs.torch-version }}" == *"a"* ]] || [[ "${{ inputs.torch-version }}" == *"rc"* ]]; then
             USE_PRE="true"
           fi
 
           if [ "$USE_PRE" = "true" ]; then
             INDEX_URL="https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}"
             echo "Installing PyTorch from nightly channel: ${INDEX_URL}"
-            if [[ "${{ inputs.torch-version }}" == "2.11.0" ]]; then
-              pip install --no-cache-dir --pre "torch>=2.11.0a0, <2.12.0" --index-url "${INDEX_URL}"
-            else
-              pip install --no-cache-dir --pre "torch==${{ inputs.torch-version }}" --index-url "${INDEX_URL}"
-            fi
+            pip install --no-cache-dir --pre "torch==${{ inputs.torch-version }}" --index-url "${INDEX_URL}" || \
+            pip install --no-cache-dir --pre "torch>=${{ inputs.torch-version }}" --index-url "${INDEX_URL}"
           else
             echo "Installing PyTorch from release channel: https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION}"
-            pip install --no-cache-dir torch==${{ inputs.torch-version }} --index-url https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION}
+            pip install --no-cache-dir torch==${{ inputs.torch-version }} --index-url https://download.pytorch.org/whl/cu${TORCH_CUDA_VERSION} || \
+            pip install --no-cache-dir --pre torch==${{ inputs.torch-version }} --index-url https://download.pytorch.org/whl/test/cu${TORCH_CUDA_VERSION} || \
+            pip install --no-cache-dir --pre "torch>=${{ inputs.torch-version }}a0, <2.12.0" --index-url https://download.pytorch.org/whl/nightly/cu${TORCH_CUDA_VERSION}
           fi
           nvcc --version
           python --version

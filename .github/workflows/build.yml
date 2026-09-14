@@ -17,7 +17,7 @@ on:
         description: "The CUDA version to use for the build"
         required: true
         type: string
-        default: "13.0.1"
+        default: "12.8.0"
       cuda-archs:
         description: "CUDA families: 80=Ampere/Ada, 90=Hopper, 100=datacenter Blackwell, 110=Thor, 120=consumer Blackwell; separate multiple values with semicolons"
         required: true
