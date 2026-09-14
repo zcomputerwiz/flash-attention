@@ -309,9 +309,11 @@ if not SKIP_CUDA_BUILD and not IS_ROCM:
     if FORCE_CXX11_ABI:
         torch._C._GLIBCXX_USE_CXX11_ABI = True
 
+    cxx_std = "c++20" if (TORCH_MAJOR, TORCH_MINOR) >= (2, 11) else "c++17"
+
     nvcc_flags = [
     "-O3",
-    "-std=c++17",
+    f"-std={cxx_std}",
     "-U__CUDA_NO_HALF_OPERATORS__",
     "-U__CUDA_NO_HALF_CONVERSIONS__",
     "-U__CUDA_NO_HALF2_OPERATORS__",
@@ -330,7 +332,7 @@ if not SKIP_CUDA_BUILD and not IS_ROCM:
     # "-DFLASHATTENTION_DISABLE_LOCAL",
     ]
 
-    compiler_c17_flag = ["-O3", "-std=c++17"]
+    compiler_c17_flag = ["-O3", f"-std={cxx_std}"]
     # Add Windows-specific flags
     if sys.platform == "win32":
         msvc_flags = ["/Zc:preprocessor", "/Zc:__cplusplus", "/permissive-"]
@@ -339,7 +341,7 @@ if not SKIP_CUDA_BUILD and not IS_ROCM:
         nvcc_flags.append("-DCCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING")
         compiler_c17_flag = [
             "-O2",
-            "/std:c++17",
+            f"/std:{cxx_std}",
             *msvc_flags,
             "/DCCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING",
         ]

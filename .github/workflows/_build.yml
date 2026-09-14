@@ -341,7 +341,9 @@ jobs:
             # Git Bash prepends /usr/bin, which also contains a POSIX
             # link.exe. Put the active MSVC toolchain first so setuptools
             # invokes Visual Studio's linker for the final .pyd.
-            msvc_bin="$(cygpath -u "${VCToolsInstallDir}")bin/Host${VSCMD_ARG_HOST_ARCH}/${VSCMD_ARG_TGT_ARCH}"
+            vctools_dir="$(cygpath -u "${VCToolsInstallDir}")"
+            vctools_dir="${vctools_dir%/}"
+            msvc_bin="${vctools_dir}/bin/Host${VSCMD_ARG_HOST_ARCH}/${VSCMD_ARG_TGT_ARCH}"
             if [ ! -x "$msvc_bin/link.exe" ]; then
               echo "::error::MSVC linker is missing: $msvc_bin/link.exe"
               exit 1
@@ -395,11 +397,19 @@ jobs:
           # Do not fail the job if timeout killed the build
           exit $EXIT_CODE
 
-      - name: Log build logs after timeout
-        if: always() && steps.build_wheel.outputs.build_exit_code == 124
+      - name: Log build failure diagnostics
+        if: always() && steps.build_wheel.outputs.build_exit_code != 0
         run: |
-          ls -al ./
-          ls -al build/ || true
+          echo "=== Workspace Directory Listing ==="
+          ls -la ./
+          if [ -d "build" ]; then
+            echo "=== Build Directory Listing ==="
+            ls -la build/
+            find build -name "*.log" -o -name ".ninja_log" 2>/dev/null | while read -r logfile; do
+              echo "=== Dumping $logfile ==="
+              tail -n 100 "$logfile" || true
+            done
+          fi
 
       - name: Check for build artifacts
         id: check_build
