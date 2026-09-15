@@ -37,7 +37,7 @@ on:
         description: "Head dimensions to compile ('64,128', '64,128,256', or 'all')"
         required: false
         type: string
-        default: "64,128"
+        default: "64,128,256"
       disable-alibi:
         description: "Disable ALiBi attention bias templates (speeds up build; not used by LLaMA/Qwen)"
         required: false
